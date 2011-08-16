@@ -1,0 +1,6 @@
+{
+  Provides        = ("Memcached");
+  Description     = "Memcache Daemon";
+  Uses            = ("Network");
+  OrderPreference = "None";
+}

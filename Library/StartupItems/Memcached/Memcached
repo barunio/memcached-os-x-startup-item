@@ -1,0 +1,99 @@
+#!/bin/bash
+#
+# /Library/StartupItems/Memcached/Memcached
+#
+# Script to startup memcached with OS X. Tested on 10.4 Tiger
+#
+# To enable, copy this file and StartupParameters.plist to
+# /Library/StartupItems/Memcached and add "MEMCACHED=-YES-"
+# to /etc/hostconfig ... You can then reboot or execute 
+# "sudo /sbin/SystemStarter start Memcached" from a terminal
+# to start it up.
+#
+# I should mention that this file uses my preferred development 
+# settings. You can edit them before copying this script over 
+# or they can be overriden by creating a config file named 
+# memcached.conf in /etc, /opt/etc, or /usr/local/etc with the 
+# following contents (modified to suit, of course):
+#
+#   MEMCACHED_EXE=/usr/local/bin/memcached
+#   MEMCACHED_PIDFILE=/var/run/memcached.pid
+#   MEMCACHED_MAX_MEM=128
+#   MEMCACHED_INTERFACE=127.0.0.1
+#   MEMCACHED_PORT=1121
+#   MEMCACHED_RUN_AS=nobody 
+#
+# ------------------------------------------------------------------- 
+# NOTE: Memcached < 1.2.0 has issues specifying the interface via the
+# '-l' switch on the Mac for some reason so if the service fails to 
+# start with the following error:
+#
+#    bind(): Can't assign requested address
+#    failed to listen
+#
+# then you will need to either upgrade to version 1.2.0+ or forgo
+# specifying an interface to listen on by removing the references
+# to A_INTERFACE on lines 65 and 75 of this script. 
+# ------------------------------------------------------------------- 
+#
+# Tim Ferrell <s0nspark@gmail.com>
+#
+
+# Suppress the annoying "$1: unbound variable" error 
+if [ -z $1 ] ; then
+  echo "Usage: $0 [start|stop|restart] "
+  exit 1
+fi
+
+# Source the common setup functions for startup scripts
+test -r /etc/rc.common || exit 1
+source /etc/rc.common
+
+NAME=memcached
+DESC="Memcached server"
+
+# look for a config file name ${NAME}.conf in /etc, /opt/etc, 
+# and /usr/local/etc ... in that order.
+[ -r /etc/${NAME}.conf ] && source /etc/${NAME}.conf
+[ -r /opt/etc/${NAME}.conf ] && source /opt/etc/${NAME}.conf
+[ -r /usr/local/etc/${NAME}.conf ] && source /usr/local/etc/${NAME}.conf
+
+# these are _my_ defaults... 
+DAEMON="${MEMCACHED_EXE:=/usr/local/bin/memcached}"
+A_PIDFILE="-P ${MEMCACHED_PIDFILE:=/var/run/memcached.pid}"
+A_MAXMEM="-m ${MEMCACHED_MAX_MEM:=128}"
+A_INTERFACE="-l ${MEMCACHED_INTERFACE:=127.0.0.1}"
+A_PORT="-p ${MEMCACHED_PORT:=11211}"
+A_RUNAS="-u ${MEMCACHED_RUN_AS:=nobody}"
+
+StartService () 
+{
+  if [ "${MEMCACHED:=-NO-}" = "-YES-" ] && ! GetPID ${NAME} > /dev/null; then
+    if [ -f /var/run/${NAME}.StartupItem ] ; then exit ; fi
+    touch /var/run/${NAME}.StartupItem
+    echo "Starting ${DESC}"
+    ${DAEMON} -d ${A_PIDFILE} ${A_MAXMEM} ${A_INTERFACE} ${A_PORT} ${A_RUNAS} 
+  fi
+}
+
+StopService ()
+{
+  PID=$(GetPID ${NAME});
+  if [ $? = 0 ]; then  
+    echo "Stopping ${DESC}, (PID ${PID})"
+    kill -TERM "${PID}"
+    rm -f ${A_PIDFILE}
+  else
+    echo "${DESC} not running."
+  fi
+  rm -f /var/run/${NAME}.StartupItem
+}
+
+RestartService () { StopService; StartService; }
+
+if test -x $DAEMON ; then
+  RunService "$1"
+else
+  echo "Could not find ${DAEMON}!"
+fi
+
